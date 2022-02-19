@@ -161,7 +161,7 @@ const changeServer = async () => {
   readline.close();
 
   exec(
-    `./hi.sh ${reduceServers[serverNumber - 1].ip} ${reduceServers[serverNumber - 1].name.replace("#", "")}`,
+    `./create-ssh-script.sh ${reduceServers[serverNumber - 1].ip} ${reduceServers[serverNumber - 1].name.replace("#", "")}`,
     (error, stdout, stderr) => {
       console.log(stdout);
       console.log(stderr);
