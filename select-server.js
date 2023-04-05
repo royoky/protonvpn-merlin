@@ -1,44 +1,13 @@
-const fetch = require("node-fetch");
-const { exec } = require("child_process");
-const readline = require("readline/promises").createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+import { exec } from "child_process";
+import * as readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+import { APIEndpointEnum } from "./enum.js";
 
-const api = "https://api.protonvpn.ch/vpn/logicals";
+const baseUrl = "https://api.protonvpn.ch";
+
+const rl = readline.createInterface({ input, output });
 
 let serverList;
-
-function getServers() {
-  return fetch(api)
-    .then((response) => {
-      return response.json();
-    })
-    .then((data) => {
-      serverList = data.LogicalServers;
-      return serverList;
-    })
-    .catch((err) => console.log(err));
-}
-
-function getCountryServers(country = "FR") {
-  return getServers().then((servers) => {
-    return (countryServers = servers.filter(
-      (server) =>
-        server.EntryCountry === country &&
-        server.ExitCountry === country &&
-        !server.Domain.includes("tor") &&
-        server.Tier === 2 &&
-        server.Features === 8
-    ));
-  });
-}
-
-function sortServers(servers) {
-  return servers.sort((a, b) => a.Score - b.Score);
-}
-
-let countryChosen;
 let listCountryCodes = [
   "AE",
   "AR",
@@ -103,24 +72,53 @@ let listCountryCodes = [
 ];
 
 function getCountryList() {
-  return getServers().then((servers) => {
-    return servers.reduce((acc, curr, idx) => {
-      if (idx === 0) {
-        acc.push(curr.EntryCountry);
-      } else if (
-        curr.EntryCountry === curr.ExitCountry &&
-        !acc.includes(curr.EntryCountry)
-      ) {
-        acc.push(curr.EntryCountry);
-      }
-      return acc;
-    }, []);
+  return fetch(baseUrl + APIEndpointEnum.COUNTRIES)
+    .then((response) => response.json())
+    .then((json) => {
+      listCountryCodes = json.Countries.find(
+        (obj) => obj.MaxTier === 2
+      ).CountryCodes;
+      console.log(listCountryCodes.sort());
+      return listCountryCodes;
+    });
+}
+console.log(getCountryList());
+
+function getServers(inCountry, outCountry) {
+  const url =
+    baseUrl +
+    APIEndpointEnum.LOGICALS +
+    (inCountry ? `?EntryCountry=${inCountry}` : "") +
+    (outCountry ? `&ExitCountry=${outCountry}` : "");
+  return fetch(url)
+    .then((response) => {
+      return response.json();
+    })
+    .then((data) => {
+      serverList = data.LogicalServers;
+      return serverList;
+    })
+    .catch((err) => console.log(err));
+}
+
+function getCountryServers(inCountry = "FR", outCountry = "FR") {
+  return getServers(inCountry, outCountry).then((servers) => {
+    return servers.filter(
+      (server) =>
+        !server.Domain.includes("tor") &&
+        server.Tier === 2 &&
+        server.Features >= 8
+    );
   });
+}
+
+function sortServers(servers) {
+  return servers.sort((a, b) => a.Score - b.Score);
 }
 
 async function changeServer() {
   // Ask for country
-  let country = await readline.question("Country to connect to? ");
+  let country = await rl.question("Country to connect to? ");
   if (!country) {
     country = "FR";
   }
@@ -130,7 +128,7 @@ async function changeServer() {
   }
   console.log(`You chose to connect to ${country}`);
 
-  let protocol = await readline.question(
+  let protocol = await rl.question(
     "Which protocol: OpenVpn (1) or Wireguard (2) (default (1)) ? :: "
   );
   if (!protocol) {
@@ -145,7 +143,7 @@ async function changeServer() {
 
   let netShield = "0";
   if (protocol === "1") {
-    netShield = await readline.question(
+    netShield = await rl.question(
       "Do you want to enable ProtonVpn ad blocker (NetShield) (default No) ? \nNo (0)\nAnti-malware filtering (1)\nAd-blocking filtering (2)\n:: "
     );
     if (!netShield) {
@@ -156,29 +154,29 @@ async function changeServer() {
     }
   }
 
-  const countryServers = await getCountryServers(country);
+  const countryServers = await getCountryServers(country, country);
   const sortedServers = sortServers(countryServers);
   const reduceServers = sortedServers.reduce(
     (acc, server) =>
       acc.concat({
-        name: server.Name,
-        domain: server.Domain,
-        entryIp: server.Servers[0].EntryIP,
-        exitIp: server.Servers[0].ExitIP,
-        label: server.Servers[0].Label,
-        load: server.Load,
-        key: server.Servers[0].X25519PublicKey,
-        score: server.Score,
+        name: server?.Name,
+        domain: server?.Domain,
+        entryIp: server?.Servers[0].EntryIP,
+        exitIp: server?.Servers[0].ExitIP,
+        label: server?.Servers[0].Label,
+        load: server?.Load,
+        key: server?.Servers[0].X25519PublicKey.replace("/", "\\/"),
+        score: server?.Score,
       }),
     []
   );
 
   // Display best servers
-  const noOfServers = 25;
+  const noOfServers = 100;
   console.log(
     `Here are the top${noOfServers} servers for country ${country} ::`
   );
-  for (let i = 0; i < noOfServers; i++) {
+  for (let i = 0; i < Math.min(noOfServers, reduceServers.length); i++) {
     console.log(
       `Server ${i + 1} :: ${reduceServers[i].name} | Entry IP: (${
         reduceServers[i].entryIp
@@ -188,7 +186,7 @@ async function changeServer() {
     );
   }
 
-  const serverNumber = await readline.question(
+  const serverNumber = await rl.question(
     `Which server do you want to connect to? (type a number between 1 and ${noOfServers} :: `
   );
   console.log(
@@ -196,7 +194,7 @@ async function changeServer() {
       reduceServers[serverNumber - 1].entryIp
     })`
   );
-  readline.close();
+  rl.close();
 
   let command = "";
   if (protocol === "1") {
