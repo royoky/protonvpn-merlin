@@ -8,88 +8,27 @@ const baseUrl = "https://api.protonvpn.ch";
 const rl = readline.createInterface({ input, output });
 
 let serverList;
-let listCountryCodes = [
-  "AE",
-  "AR",
-  "AT",
-  "AU",
-  "BE",
-  "BG",
-  "BR",
-  "CA",
-  "CH",
-  "CL",
-  "CO",
-  "CR",
-  "CY",
-  "CZ",
-  "DE",
-  "DK",
-  "EE",
-  "EG",
-  "ES",
-  "FI",
-  "FR",
-  "GR",
-  "HK",
-  "HU",
-  "IE",
-  "IL",
-  "IN",
-  "IS",
-  "IT",
-  "JP",
-  "KH",
-  "KR",
-  "LT",
-  "LU",
-  "LV",
-  "MD",
-  "MX",
-  "MY",
-  "NG",
-  "NL",
-  "NO",
-  "NZ",
-  "PE",
-  "PH",
-  "PL",
-  "PT",
-  "RO",
-  "RS",
-  "RU",
-  "SE",
-  "SG",
-  "SI",
-  "SK",
-  "TR",
-  "TW",
-  "UA",
-  "UK",
-  "US",
-  "VN",
-  "ZA",
-];
 
-function getCountryList() {
+async function getCountryList() {
   return fetch(baseUrl + APIEndpointEnum.COUNTRIES)
     .then((response) => response.json())
     .then((json) => {
-      listCountryCodes = json.Countries.find(
+      return json.Countries.find(
         (obj) => obj.MaxTier === 2
-      ).CountryCodes;
-      console.log(listCountryCodes.sort());
-      return listCountryCodes;
+      ).CountryCodes.sort();
     });
 }
-console.log(getCountryList());
 
-function getServers(inCountry, outCountry) {
-  const url =
-    baseUrl +
-    APIEndpointEnum.LOGICALS +
-    (inCountry ? `?EntryCountry=${inCountry}` : "") +
-    (outCountry ? `&ExitCountry=${outCountry}` : "");
+async function getServers(inCountry, outCountry) {
+  const params = new URLSearchParams({
+    ...(inCountry && { EntryCountry: inCountry }),
+    ...(outCountry && { ExitCountry: outCountry }),
+  });
+
+  const urlParams = params.toString() ? "?" + params.toString() : "";
+
+  const url = `${baseUrl}${APIEndpointEnum.LOGICALS}${urlParams}`;
+
   return fetch(url)
     .then((response) => {
       return response.json();
@@ -101,7 +40,7 @@ function getServers(inCountry, outCountry) {
     .catch((err) => console.log(err));
 }
 
-function getCountryServers(inCountry = "FR", outCountry = "FR") {
+async function getCountryServers(inCountry = "FR", outCountry = "FR") {
   return getServers(inCountry, outCountry).then((servers) => {
     return servers.filter(
       (server) =>
@@ -113,11 +52,13 @@ function getCountryServers(inCountry = "FR", outCountry = "FR") {
 }
 
 function sortServers(servers) {
-  return servers.sort((a, b) => a.Score - b.Score);
+  return servers.sort((a, b) => a.Load - b.Load);
 }
 
 async function changeServer() {
   // Ask for country
+  const listCountryCodes = await getCountryList();
+  console.log("list of country codes:", listCountryCodes);
   let country = await rl.question("Country to connect to? ");
   if (!country) {
     country = "FR";
