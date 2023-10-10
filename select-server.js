@@ -7,8 +7,6 @@ const baseUrl = "https://api.protonvpn.ch";
 
 const rl = readline.createInterface({ input, output });
 
-let serverList;
-
 async function getCountryList() {
   return fetch(baseUrl + APIEndpointEnum.COUNTRIES)
     .then((response) => response.json())
@@ -29,15 +27,12 @@ async function getServers(inCountry, outCountry) {
 
   const url = `${baseUrl}${APIEndpointEnum.LOGICALS}${urlParams}`;
 
-  return fetch(url)
-    .then((response) => {
-      return response.json();
-    })
-    .then((data) => {
-      serverList = data.LogicalServers;
-      return serverList;
-    })
-    .catch((err) => console.log(err));
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("problem when fetching servers");
+  }
+  const data = await res.json();
+  return data.LogicalServers;
 }
 
 async function getCountryServers(inCountry = "FR", outCountry = "FR") {
@@ -121,9 +116,8 @@ async function changeServer() {
     console.log(
       `Server ${i + 1} :: ${reduceServers[i].name} | Entry IP: (${
         reduceServers[i].entryIp
-      }) | Exit IP: (${reduceServers[i].exitIp})| Public Key: ${
-        reduceServers[i].key
-      } | ${reduceServers[i].load}% loaded | label: ${reduceServers[i].label}`
+      }) | Exit IP: (${reduceServers[i].exitIp})
+      } | ${reduceServers[i].load}% loaded | label: ${reduceServers[i].label}\n`
     );
   }
 
